@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "agno-required",
+      "name": "Agno Framework Required",
+      "description": "All agent implementations must use the Agno framework",
+      "severity": "error",
+      "pattern": "(?!.*agno\\.agent).*Agent\\s*=.*",
+      "message": "Agent implementations must use the Agno framework. Import and use 'from agno.agent import Agent'.",
+      "filePattern": "**/*.py"
+    },
+    {
+      "id": "docs-reference-required",
+      "name": "Documentation Reference Required",
+      "description": "Reference to Agno documentation must be included in comments before implementing functionality",
+      "severity": "warning",
+      "pattern": "(?!.*@see.*agno\\.com).*def\\s+.*\\(.*\\)\\s*:",
+      "message": "Include a reference to Agno documentation before implementing any functionality. Use format: '@see: https://docs.agno.com/...'",
+      "filePattern": "**/*.py"
+    },
+    {
+      "id": "openai-model-restriction",
+      "name": "OpenAI Model Restriction",
+      "description": "Ensure OpenAI models are accessed through Agno's abstraction layer",
+      "severity": "error",
+      "pattern": "(?!.*agno\\.models\\.openai).*openai\\..*completion.*create.*",
+      "message": "Direct usage of OpenAI API is not allowed. Use Agno's model abstraction: 'from agno.models.openai import OpenAIChat'",
+      "filePattern": "**/*.py"
+    },
+    {
+      "id": "agent-configuration",
+      "name": "Agent Configuration Standards",
+      "description": "All Agno agents must have proper description and configuration",
+      "severity": "warning",
+      "pattern": "Agent\\((?!.*description).*\\)",
+      "message": "All Agno agents must include a description parameter that explains their purpose",
+      "filePattern": "**/*.py"
+    },
+    {
+      "id": "execution-documentation",
+      "name": "Execution Documentation",
+      "description": "Code that executes agent actions must reference documentation",
+      "severity": "warning",
+      "pattern": "agent\\.(?:get_response|run|print_response)\\((?!.*#.*@doc).*\\)",
+      "message": "Include a reference to Agno documentation in a comment before executing agent actions. Format: '# @doc: https://docs.agno.com/...'",
+      "filePattern": "**/*.py"
+    },
+    {
+      "id": "no-version-constraints",
+      "name": "No Version Constraints in Requirements",
+      "description": "Ensure requirements.txt doesn't include version constraints to always use latest packages",
+      "severity": "error",
+      "pattern": "^[^#].*[>=<~].*$",
+      "message": "Do not specify version constraints in requirements.txt to ensure using the latest package versions",
+      "filePattern": "**/requirements.txt"
+    }
+  ],
+  "ignorePatterns": [
+    "**/venv/**",
+    "**/__pycache__/**",
+    "**/tests/**"
+  ],
+  "settings": {
+    "autoApplyFixes": false,
+    "runOnSave": true,
+    "showNotifications": true
+  }
+} 

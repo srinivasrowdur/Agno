@@ -1,0 +1,27 @@
+# Core dependencies
+fastapi
+uvicorn[standard]
+pydantic
+
+# AI and NLP dependencies
+openai
+agno
+
+# HTTP and API utilities
+httpx
+requests
+tenacity
+sseclient-py
+
+# Configuration and environment
+python-dotenv
+
+# Production server
+gunicorn
+
+# Logging and monitoring
+python-json-logger
+
+# Testing
+pytest
+pytest-cov 
