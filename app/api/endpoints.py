@@ -193,10 +193,6 @@ async def research(request: ResearchRequest, req: Request):
     You can specify a different model by including the model_name parameter.
     Set stream=True to receive a streaming response.
     """
-    # If streaming is requested, use the streaming endpoint
-    if request.stream:
-        return await stream_research(request, req)
-    
     client_host = req.client.host if req.client else "unknown"
     request_id = req.headers.get("X-Request-ID", "unknown")
     model_name = request.model_name or MODEL_NAME
@@ -206,23 +202,64 @@ async def research(request: ResearchRequest, req: Request):
         extra={
             "client_ip": client_host,
             "request_id": request_id,
-            "model": model_name
+            "model": model_name,
+            "stream": request.stream
         }
     )
     
     try:
-        # Get the first (and only) chunk from the generator
-        async for chunk in research_service.research(request.query, stream=False):
-            if chunk.get("done", False):
-                return ResearchResponse(
-                    message={"role": "assistant", "content": chunk.get("content", "")},
-                    model=model_name
-                )
-        
-        raise HTTPException(
-            status_code=500,
-            detail="No response received from research service"
-        )
+        if request.stream:
+            async def event_generator():
+                """Generate server-sent events."""
+                try:
+                    async for chunk in research_service.research(request.query, stream=True):
+                        # Format as a server-sent event with proper JSON serialization
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        
+                        # If this is the final chunk, log completion
+                        if chunk.get("done", False):
+                            logger.info(
+                                f"Streaming research request completed successfully",
+                                extra={
+                                    "request_id": request_id,
+                                    "model": model_name
+                                }
+                            )
+                except Exception as e:
+                    logger.error(
+                        f"Error processing streaming request",
+                        exc_info=True,
+                        extra={
+                            "request_id": request_id, 
+                            "error": str(e),
+                            "model": model_name
+                        }
+                    )
+                    # Send an error event
+                    error_chunk = {
+                        "content": f"\n\nError: {str(e)}",
+                        "done": True,
+                        "model": model_name
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+            
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream"
+            )
+        else:
+            # Get the first (and only) chunk from the generator
+            async for chunk in research_service.research(request.query, stream=False):
+                if chunk.get("done", False):
+                    return ResearchResponse(
+                        message={"role": "assistant", "content": chunk.get("content", "")},
+                        model=model_name
+                    )
+            
+            raise HTTPException(
+                status_code=500,
+                detail="No response received from research service"
+            )
         
     except ValueError as ve:
         logger.error(
@@ -244,46 +281,4 @@ async def research(request: ResearchRequest, req: Request):
                 "model": model_name
             }
         )
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/research/stream")
-async def stream_research(request: ResearchRequest, req: Request):
-    """Stream research results as they are generated."""
-    client_host = req.client.host if req.client else "unknown"
-    request_id = req.headers.get("X-Request-ID", "unknown")
-    model_name = request.model_name or MODEL_NAME
-    
-    logger.info(
-        f"Streaming research request received",
-        extra={
-            "client_ip": client_host,
-            "request_id": request_id,
-            "model": model_name
-        }
-    )
-    
-    async def generate():
-        try:
-            async for chunk in research_service.research(request.query, stream=True):
-                yield f"data: {json.dumps(chunk)}\n\n"
-        except Exception as e:
-            logger.error(
-                f"Error in stream",
-                exc_info=True,
-                extra={
-                    "request_id": request_id,
-                    "error": str(e),
-                    "model": model_name
-                }
-            )
-            error_chunk = {
-                "content": f"Error: {str(e)}",
-                "done": True,
-                "model": model_name
-            }
-            yield f"data: {json.dumps(error_chunk)}\n\n"
-    
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream"
-    ) 
+        raise HTTPException(status_code=500, detail=str(e)) 
