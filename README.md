@@ -1,45 +1,41 @@
 # Agno API
 
-A powerful API service that provides access to AI models using the Agno framework.
+A powerful API service for accessing AI models based on the Agno framework.
 
 ## Features
 
-- **Chat Completion**: Generate responses from AI models
-- **Streaming Support**: Receive model responses in real-time as they're generated
-- **Multi-Model Support**: Configure and use different AI models without changing server code
-- **Docker Support**: Easy deployment using Docker
+- Chat completion API
+- [Streaming support](README_STREAMING.md) for real-time responses
+- Multi-model support
+- Docker support
 
 ## Getting Started
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Python 3.11+ (for local development)
-- OpenAI API key or compatible API
+- Python 3.11+
+- OpenAI API key
 
 ### Installation
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd agno
+   git clone https://github.com/yourusername/agno-api.git
+   cd agno-api
    ```
 
-2. Set your API key:
-   Create a `.env` file with your API key:
+2. Set your OpenAI API key in a `.env` file:
    ```
    OPENAI_API_KEY=your_api_key_here
    ```
 
-3. Start the service using Docker:
+3. Start the service:
    ```bash
    docker compose up -d
    ```
 
-4. The API will be available at:
-   ```
-   http://localhost:8000
-   ```
+4. The API will be available at `http://localhost:8000`
 
 ## API Endpoints
 
@@ -49,26 +45,21 @@ A powerful API service that provides access to AI models using the Agno framewor
 POST /api/v1/chat
 ```
 
-Request body:
+Request Body:
 ```json
 {
   "messages": [
-    {
-      "role": "user",
-      "content": "Hello! How are you?"
-    }
+    {"role": "user", "content": "Hello, who are you?"}
   ],
-  "max_tokens": 500,
-  "model_name": "gpt-4",  // Optional
-  "stream": false  // Set to true for streaming responses
+  "model": "gpt-3.5-turbo",
+  "max_tokens": 1000,
+  "stream": false
 }
 ```
 
+For streaming implementation details, see the [Streaming Documentation](README_STREAMING.md).
+
 ## Testing
-
-This project includes various tests to ensure functionality:
-
-### API Tests
 
 Test the basic API endpoints:
 ```bash

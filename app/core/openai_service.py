@@ -103,11 +103,34 @@ class AgnoService:
                 logger.debug(f"Sending request to Agno agent with model {model_to_use} (attempt {retry_count + 1}/{max_retries})")
                 response = agent.run(last_message)
                 
+                # Handle generator objects by consuming the generator
+                if hasattr(response, '__iter__') and hasattr(response, '__next__') and not hasattr(response, 'content'):
+                    # It's a generator - consume it to get the full content
+                    content = ""
+                    try:
+                        for chunk in response:
+                            if isinstance(chunk, str):
+                                content += chunk
+                            elif hasattr(chunk, 'content'):
+                                content += chunk.content
+                            elif hasattr(chunk, 'delta'):
+                                content += chunk.delta
+                            else:
+                                content += str(chunk)
+                    except Exception as e:
+                        logger.warning(f"Error consuming generator: {str(e)}")
+                        # If we've collected some content, use it; otherwise re-raise
+                        if not content:
+                            raise
+                else:
+                    # Not a generator - use content attribute if available or convert to string
+                    content = response.content if hasattr(response, 'content') else str(response)
+                
                 # Format the response
                 result = ChatResponse(
                     message=ChatMessage(
                         role="assistant", 
-                        content=response.content if hasattr(response, 'content') else str(response)
+                        content=content
                     ),
                     usage=None,  # Agno doesn't provide usage statistics
                     model=model_to_use  # Include the model used in the response
@@ -139,40 +162,25 @@ class AgnoService:
         logger.debug(f"Starting streaming response with model {model_to_use}")
         
         try:
-            # Stream the response using the agent's run method with stream=True
-            # This returns a regular generator, not an async generator
-            full_content = ""
+            # Use Agno's native streaming functionality
+            # This returns an iterator of RunResponse objects
+            run_response_iterator = agent.run(last_message, stream=True)
             
-            # Get the generator
-            chunk_generator = agent.run(last_message, stream=True)
-            
-            # Process each chunk from the generator
-            for chunk_obj in chunk_generator:
-                # Convert to string if not already a string
-                if not isinstance(chunk_obj, str):
-                    if hasattr(chunk_obj, 'delta'):
-                        delta = chunk_obj.delta
-                    elif hasattr(chunk_obj, 'content'):
-                        delta = chunk_obj.content[len(full_content):] if hasattr(chunk_obj, 'content') else ""
-                    else:
-                        delta = str(chunk_obj)
-                else:
-                    delta = chunk_obj
+            # Process each chunk as it comes
+            for chunk in run_response_iterator:
+                # Skip empty chunks
+                if not chunk or not hasattr(chunk, 'content') or not chunk.content:
+                    continue
                 
-                # Only yield non-empty chunks to reduce noise
-                if delta:
-                    # Track the full content for calculating deltas
-                    full_content += delta
-                    
-                    # Log the delta content for debugging
-                    logger.debug(f"Streaming chunk: {delta[:20]}..." if len(delta) > 20 else f"Streaming chunk: {delta}")
-                    
-                    # Create and yield the streaming chunk
-                    yield StreamingChunk(
-                        content=delta,
-                        done=False,
-                        model=model_to_use
-                    )
+                # Log the chunk content
+                logger.debug(f"Streaming chunk: {chunk.content[:30]}..." if len(chunk.content) > 30 else f"Streaming chunk: {chunk.content}")
+                
+                # Yield a streaming chunk with the content
+                yield StreamingChunk(
+                    content=chunk.content,
+                    done=False,
+                    model=model_to_use
+                )
             
             # Send a final chunk to indicate we're done
             yield StreamingChunk(
