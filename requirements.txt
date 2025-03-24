@@ -6,6 +6,7 @@ pydantic
 # AI and NLP dependencies
 openai
 agno
+exa_py
 
 # HTTP and API utilities
 httpx

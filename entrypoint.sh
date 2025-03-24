@@ -51,7 +51,8 @@ if [ "$ENVIRONMENT" = "production" ]; then
         --bind 0.0.0.0:8000 \
         --workers $WORKERS \
         --worker-class uvicorn.workers.UvicornWorker \
-        --log-level $LOG_LEVEL &
+        --log-level $LOG_LEVEL \
+        --timeout 300 &
 else
     # Use Uvicorn in development for hot reloading
     uvicorn app.main:app \

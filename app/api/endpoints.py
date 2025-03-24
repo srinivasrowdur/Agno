@@ -1,8 +1,10 @@
 import logging
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from app.models.chat import ChatRequest, ChatResponse, StreamingChunk
+from app.models.chat import ChatRequest, ChatResponse, StreamingChunk as ChatStreamingChunk
+from app.models.research import ResearchRequest, ResearchResponse, StreamingChunk as ResearchStreamingChunk
 from app.core.openai_service import AgnoService
+from app.core.research_service import ResearchService
 from app.core.config import MODEL_NAME
 import json
 
@@ -11,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Initialize services
+research_service = ResearchService(model_name=MODEL_NAME)
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_agent(request: ChatRequest, req: Request):
@@ -168,7 +172,7 @@ async def stream_chat_with_agent(request: ChatRequest, req: Request):
                 }
             )
             # Send an error event
-            error_chunk = StreamingChunk(
+            error_chunk = ChatStreamingChunk(
                 content=f"\n\nError: {str(e)}",
                 done=True,
                 model=model_name
@@ -177,5 +181,109 @@ async def stream_chat_with_agent(request: ChatRequest, req: Request):
     
     return StreamingResponse(
         event_generator(),
+        media_type="text/event-stream"
+    )
+
+@router.post("/research", response_model=ResearchResponse)
+async def research(request: ResearchRequest, req: Request):
+    """
+    Conduct research using Agno with Exa tools.
+    
+    This endpoint takes a research request with a query and returns a detailed research report.
+    You can specify a different model by including the model_name parameter.
+    Set stream=True to receive a streaming response.
+    """
+    # If streaming is requested, use the streaming endpoint
+    if request.stream:
+        return await stream_research(request, req)
+    
+    client_host = req.client.host if req.client else "unknown"
+    request_id = req.headers.get("X-Request-ID", "unknown")
+    model_name = request.model_name or MODEL_NAME
+    
+    logger.info(
+        f"Research request received",
+        extra={
+            "client_ip": client_host,
+            "request_id": request_id,
+            "model": model_name
+        }
+    )
+    
+    try:
+        # Get the first (and only) chunk from the generator
+        async for chunk in research_service.research(request.query, stream=False):
+            if chunk.get("done", False):
+                return ResearchResponse(
+                    message={"role": "assistant", "content": chunk.get("content", "")},
+                    model=model_name
+                )
+        
+        raise HTTPException(
+            status_code=500,
+            detail="No response received from research service"
+        )
+        
+    except ValueError as ve:
+        logger.error(
+            f"Validation error",
+            extra={
+                "request_id": request_id,
+                "error": str(ve),
+                "model": model_name
+            }
+        )
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(
+            f"Error processing request",
+            exc_info=True,
+            extra={
+                "request_id": request_id,
+                "error": str(e),
+                "model": model_name
+            }
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/research/stream")
+async def stream_research(request: ResearchRequest, req: Request):
+    """Stream research results as they are generated."""
+    client_host = req.client.host if req.client else "unknown"
+    request_id = req.headers.get("X-Request-ID", "unknown")
+    model_name = request.model_name or MODEL_NAME
+    
+    logger.info(
+        f"Streaming research request received",
+        extra={
+            "client_ip": client_host,
+            "request_id": request_id,
+            "model": model_name
+        }
+    )
+    
+    async def generate():
+        try:
+            async for chunk in research_service.research(request.query, stream=True):
+                yield f"data: {json.dumps(chunk)}\n\n"
+        except Exception as e:
+            logger.error(
+                f"Error in stream",
+                exc_info=True,
+                extra={
+                    "request_id": request_id,
+                    "error": str(e),
+                    "model": model_name
+                }
+            )
+            error_chunk = {
+                "content": f"Error: {str(e)}",
+                "done": True,
+                "model": model_name
+            }
+            yield f"data: {json.dumps(error_chunk)}\n\n"
+    
+    return StreamingResponse(
+        generate(),
         media_type="text/event-stream"
     ) 
